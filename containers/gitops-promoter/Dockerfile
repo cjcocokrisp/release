@@ -67,12 +67,20 @@ COPY sources/gitops-promoter/applyconfiguration/ applyconfiguration/
 COPY sources/gitops-promoter/internal/ internal/
 COPY sources/gitops-promoter/hack/git/promoter_askpass.sh hack/git/promoter_askpass.sh
 COPY sources/gitops-promoter/ui/web/ ./ui/web
+COPY config.yaml ./config.yaml
 
 # Copy built UI static files for embedding into binary
 COPY --from=promoter-dashboard-ui /app/gitops-promoter/ui/web/static ./ui/web/static
 
+# Install yq for parsing version to pass to the linker flags
+RUN yum install -y yq
+
 # Build binary
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o gitops-promoter cmd/main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a \
+  -ldflags "-X 'github.com/argoproj-labs/gitops-promoter/internal/version.version=$(yq '.sources[] | select(.path == \"sources/gitops-promoter\") | .ref' ./config.yaml)' \
+  -X 'github.com/argoproj-labs/gitops-promoter/internal/version.buildDate=$(date +%F)'" \
+  -o gitops-promoter \
+  cmd/main.go
 
 #################################################################################################
 # Build tini binary
